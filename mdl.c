@@ -9,6 +9,7 @@
 #include "vecmath.h"
 
 #include "mdl.h"
+#include "utils.h"
 
 #define MDL_MAGIC (0x4F504449)
 #define MDL_VERSION (6)
@@ -294,50 +295,15 @@ bool mdl_header_valid(const mdl_header_t * const header)
     return true;
 }
 
-/*
- * TODO: factor out file read
- */
 model_t *model_from_mdl(const char *path)
 {
     model_t *dest = calloc(1, sizeof *dest);
     
-    FILE *mdl_file = fopen(path, "rb");
-    if (mdl_file == NULL) {
-        fprintf(stderr, "Couldn't open %s.\n", path);
-        return NULL;
-    }
-
-    if (fseek(mdl_file, 0, SEEK_END) != 0) {
-        perror(path);
-        return NULL;
-    }
-
-    const long file_size = ftell(mdl_file);
-    if (file_size == -1) {
-        perror(path);
-        return NULL;
-    }
-
-    rewind(mdl_file);
-
-    uint8_t *mdl_data = calloc(file_size, sizeof *mdl_data);
+    uint8_t *mdl_data = Utils.readBinaryFile(path);
     if (mdl_data == NULL) {
-        perror("model_from_mdl");
+        perror(path);
         return NULL;
     }
-
-    const size_t read_size = fread(mdl_data, sizeof *mdl_data, file_size, mdl_file);
-    if ((long)read_size != file_size) {
-        fputs("Short read.\n", stderr);
-        return NULL;
-    }
-
-    fclose(mdl_file);
-    mdl_file = NULL;
-
-    /*
-     * mdl_data now contains the entire contents of the MDL file.
-     */
 
     const mdl_header_t * const header = (mdl_header_t *)mdl_data;
     if (!mdl_header_valid(header)) {
