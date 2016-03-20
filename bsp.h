@@ -15,7 +15,7 @@
  */
 
 #ifndef BSP_H
-#define BDP_H
+#define BSP_H
 
 #include <stdint.h>
 
@@ -135,15 +135,20 @@ typedef struct {
 } bspfile_mipmap_t;
 
 typedef struct {
+    /*
+     * Index of the plane that partitions this node. Note that a negative value
+     * here indicates that the node is actually a leaf!
+     */
     int32_t plane_index;
 
     /*
-     * If the MSB in front is not set, then front is the index of the front
-     * child node. If it is set, then the bitwise negation of front is the index
-     * of the front child leaf.
+     * If the MSB in front/back is not set, then front/back is the index of the
+     * front/back child node. If it is set, then the bitwise negation of
+     * front/back is the index of the front/back child leaf.
      */
-    uint16_t front;
-    uint16_t back;
+    int16_t front;
+    int16_t back;
+
     bspfile_shortbounds_t bounds;
     uint16_t face_index;
     uint16_t face_count;
@@ -151,13 +156,26 @@ typedef struct {
 
 typedef struct {
     int32_t type;
+
+    /*
+     * Index of the visibility list for this leaf. If this is -1, this leaf has
+     * no visibility list and can see every other leaf.
+     */
     int32_t visibility_list;
     bspfile_shortbounds_t bounds;
-    uint16_t face_list_first;
+
+    /*
+     * Index of the face list for this leaf.
+     */
+    uint16_t face_list;
+
+    /*
+     * Total number of faces in this leaf.
+     */
     uint16_t face_count;
     uint8_t sound_water;
     uint8_t sound_sky;
-    uint8_t sound_slime;
+    uint8_t sound_acid;
     uint8_t sound_lava;
 } bspfile_leaf_t;
 
