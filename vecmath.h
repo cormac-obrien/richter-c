@@ -26,17 +26,23 @@
 
 #define LINMATH_H_DEFINE_VEC(n) \
 typedef float vec##n##_t[n]; \
+static inline void vec##n##_copy(vec##n##_t dest, vec##n##_t src) \
+{ \
+    for (int i = 0; i < n; i++) { \
+        dest[i] = src[i]; \
+    } \
+} \
 static inline void vec##n##_zero(vec##n##_t r) \
 { \
-    int i; \
-    for (i = 0; i < n; ++i) \
+    for (int i = 0; i < n; i++) { \
         r[i] = 0; \
+    } \
 } \
 static inline void vec##n##_add(vec##n##_t r, vec##n##_t const a, vec##n##_t const b) \
 { \
-    int i; \
-    for(i=0; i<n; ++i) \
+    for(int i = 0; i < n; i++) { \
         r[i] = a[i] + b[i]; \
+    } \
 } \
 static inline void vec##n##_sub(vec##n##_t r, vec##n##_t const a, vec##n##_t const b) \
 { \
