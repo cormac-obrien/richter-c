@@ -20,7 +20,7 @@
 
 #include "utils.h"
 
-uint8_t *utils_read_binary_file(const char *path)
+void *utils_read_binary_file(const char *path)
 {
     FILE *fp = fopen(path, "rb");
     if (fp == NULL) {
@@ -56,7 +56,7 @@ uint8_t *utils_read_binary_file(const char *path)
     fclose(fp);
     fp = NULL;
 
-    return data;
+    return (void *)data;
 }
 
 const struct utils_namespace Utils = {
