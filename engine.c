@@ -14,10 +14,22 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "engine.h"
 
 static float engine_time_delta = 0.0f;
 static uint32_t engine_frame_count = 0;
+
+void engine_fatal(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    exit(EXIT_FAILURE);
+}
 
 void engine_set_time_delta(float dt)
 {
@@ -40,6 +52,7 @@ uint32_t engine_get_frame_count()
 }
 
 const struct engine_namespace Engine = {
+    .fatal = engine_fatal,
     .setTimeDelta = engine_set_time_delta,
     .getTimeDelta = engine_get_time_delta,
     .incFrameCount = engine_inc_frame_count,
