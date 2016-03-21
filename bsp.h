@@ -26,7 +26,7 @@ typedef float vec3_t[3];
 enum {
     LUMP_ENTITIES = 0,
     LUMP_PLANES = 1,
-    LUMP_MIPMAPS = 2,
+    LUMP_TEXTURES = 2,
     LUMP_VERTICES = 3,
     LUMP_VISLISTS = 4,
     LUMP_NODES = 5,
@@ -37,7 +37,7 @@ enum {
     LUMP_LEAVES = 10,
     LUMP_FACE_LIST = 11,
     LUMP_EDGES = 12,
-    LUMP_EDGE_LIST = 13,
+    LUMP_EDGETABLE = 13,
     LUMP_MODELS = 14,
     LUMP_COUNT = 15
 };
@@ -88,7 +88,7 @@ typedef struct {
 
 typedef struct {
     uint16_t endpoints[2];
-} bsp_edge_t;
+} bspfile_edge_t;
 
 typedef struct {
     vec3_t vector_u;
@@ -118,7 +118,7 @@ typedef struct {
      * Flexible array of texture_count offsets
      */
     int32_t offsets[];
-} bspfile_mipmap_header_t;
+} bspfile_texheader_t;
 
 typedef struct {
     char name[16];
@@ -132,7 +132,7 @@ typedef struct {
     uint32_t offset_half;
     uint32_t offset_quarter;
     uint32_t offset_eighth;
-} bspfile_mipmap_t;
+} bspfile_texture_t;
 
 typedef struct {
     /*

@@ -25,8 +25,17 @@
 #include "vecmath.h"
 
 typedef struct {
+    uint16_t endpoints[2];
+} bsp_edge_t;
+
+typedef struct {
     vec3_t normal;
 } bsp_plane_t;
+
+typedef struct {
+    int id;
+    int type;
+} bsp_leaf_t;
 
 /*
  * Internal representation of a node in a BSP tree
@@ -55,22 +64,28 @@ typedef struct bsp_node_s {
     struct bsp_node_s *back;
 } bsp_node_t;
 
-typedef struct {
-    int id;
-    int type;
-} bsp_leaf_t;
 
 typedef struct bsp_s {
     uint8_t *data;
 
-    int node_count;
-    bsp_node_t *nodes;
+    int vertex_count;
+    vec3_t *vertices;
+
+    int edge_count;
+    bsp_edge_t *edges;
+
+    int edgetable_count;
+    int *edgetable;
+
+    int plane_count;
+    bsp_plane_t *planes;
 
     int leaf_count;
     bsp_leaf_t *leaves;
 
-    int plane_count;
-    bsp_plane_t *planes;
+    int node_count;
+    bsp_node_t *nodes;
+
 } bsp_t;
 
 /*
@@ -102,9 +117,77 @@ bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
     return (bsp_leaf_t *)node;
 }
 
+void bsp_load_vertices(bsp_t *bsp, vec3_t *data, int size)
+{
+    if (size % sizeof *data != 0) {
+        fputs("Vertex data has bad size.\n", stderr);
+        return;
+    }
+
+    int count = size / sizeof *data;
+    vec3_t *vertices = calloc(count, sizeof *vertices);
+
+    for (int i = 0; i < count; i++) {
+        vec3_copy(vertices[i], data[i]);
+    }
+
+    bsp->vertices = vertices;
+}
+
 /**
- * Loads \p size bytes' worth of leaves from \p data int \p bsp.
- * @param bsp A pointer to the BSP struct in which to store the node data
+ * Loads \p size bytes' worth of edges from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the edges
+ * @param data An array of edges to be loaded
+ * @param size The size in bytes of \p data
+ */
+void bsp_load_edges(bsp_t *bsp, bspfile_edge_t *data, int size)
+{
+    if (size % sizeof *data != 0) {
+        fputs("Edge data has bad size.\n", stderr);
+        return;
+    }
+
+    int count = size / sizeof *data;
+    bsp_edge_t *edges = calloc(count, sizeof *edges);
+
+    for (int i = 0; i < count; i++) {
+        edges[i].endpoints[0] = data[i].endpoints[0];
+        edges[i].endpoints[1] = data[i].endpoints[1];
+    }
+
+    bsp->edges = edges;
+}
+
+/**
+ * Loads \p size bytes' worth of edge indices from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the edge indices
+ * @param data An array of edge indices to be loaded
+ * @param size The size in bytes of \p data
+ */
+void bsp_load_edgetable(bsp_t *bsp, int *data, int size)
+{
+    if (size % sizeof *data != 0) {
+        fputs("Edge list data has bad size.\n", stderr);
+        return;
+    }
+
+    int count = size / sizeof *data;
+    int *edgetable = calloc(count, sizeof *edgetable);
+
+    for (int i = 0; i < count; i++) {
+        edgetable[i] = data[i];
+    }
+
+    bsp->edgetable = edgetable;
+}
+
+void bsp_load_textures(bsp_t *bsp, bspfile_texheader_t *data, int size)
+{
+}
+
+/**
+ * Loads \p size bytes' worth of leaves from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the leaf data
  * @param data An array of leaves to be loaded
  * @param size The size in bytes of \p data
  */
@@ -136,6 +219,9 @@ void bsp_load_leaves(bsp_t *bsp, bspfile_leaf_t *data, int size)
  */
 void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
 {
+    /*
+     * Make sure size is of correct parity
+     */
     if (size % sizeof *data != 0) {
         fputs("Node data has bad size.\n", stderr);
         return;
@@ -144,6 +230,9 @@ void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
     int count = size / sizeof *data;
     bsp_node_t *nodes = calloc(count, sizeof *nodes);
 
+    /*
+     * Set up table for cycle checking
+     */
     int visited[count];
     for (int i = 0; i < count; i++) {
         visited[i] = false;
@@ -198,6 +287,9 @@ bsp_t *bsp_load(const char *path)
 
     bsp_t *bsp = calloc(1, sizeof *bsp);
 
+    bsp_load_vertices(bsp, elements[LUMP_VERTICES], sizes[LUMP_VERTICES]);
+    bsp_load_edges(bsp, elements[LUMP_EDGES], sizes[LUMP_EDGES]);
+    bsp_load_edgetable(bsp, elements[LUMP_EDGETABLE], sizes[LUMP_EDGETABLE]);
     bsp_load_leaves(bsp, elements[LUMP_LEAVES], sizes[LUMP_LEAVES]);
     bsp_load_nodes(bsp, elements[LUMP_NODES], sizes[LUMP_NODES]);
 
