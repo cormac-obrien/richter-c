@@ -29,9 +29,31 @@ typedef struct {
     uint16_t endpoints[2];
 } bsp_edge_t;
 
+#define BSP_LEAF_NORMAL (-1)
+#define BSP_LEAF_SOLID  (-2)
+#define BSP_LEAF_WATER  (-3)
+#define BSP_LEAF_ACID   (-4)
+#define BSP_LEAF_LAVA   (-5)
+#define BSP_LEAF_SKY    (-6)
 typedef struct {
     int id;
+
+    /*
+     * This indicates the behavior of space inside this leaf. See the BSP_LEAF_*
+     * definitions above.
+     */
     int type;
+
+    /*
+     * The frame when this leaf was traversed last. If this equals the current
+     * frame count, this leaf needs to be examined.
+     */
+    int last_visited;
+
+    /*
+     * A pointer to this leaf's compressed visibility list.
+     */
+    uint8_t *vislist;
 } bsp_leaf_t;
 
 typedef struct {
@@ -44,11 +66,12 @@ typedef struct {
  * Internal representation of a node in a BSP tree
  */
 typedef struct bsp_node_s {
+    int id;
+
     /*
      * This field is the same as the bspfile_node_t's plane_index field, kept
      * here solely to determine if this is a node or a leaf.
      */
-    int id;
     int plane_index;
 
     /*
@@ -67,6 +90,9 @@ typedef struct bsp_node_s {
     struct bsp_node_s *back;
 } bsp_node_t;
 
+typedef struct {
+
+} bsp_surface_t;
 
 typedef struct bsp_s {
     int vertex_count;
@@ -80,6 +106,8 @@ typedef struct bsp_s {
 
     int texture_count;
     bsp_texture_t **textures;
+
+    uint8_t *lightmaps;
 
     uint8_t *vislists;
 
@@ -97,8 +125,11 @@ typedef struct bsp_s {
 
 } bsp_t;
 
-/*
- * Returns a pointer to the leaf that contains the specified point.
+/**
+ * Returns a pointer to the leaf that contains \p point.
+ * @param bsp The BSP structure to search
+ * @param point The point to be matched with a leaf
+ * @return The leaf containing \p point
  */
 bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
 {
@@ -126,6 +157,12 @@ bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
     return (bsp_leaf_t *)node;
 }
 
+/**
+ * Loads \p size bytes' worth of vertex data from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the vertices
+ * @param data An array of vertices to be loaded
+ * @param size The size in bytes of \p data
+ */
 void bsp_load_vertices(bsp_t *bsp, vec3_t *data, int size)
 {
     if (size % sizeof *data != 0) {
@@ -206,8 +243,20 @@ void bsp_load_textures(bsp_t *bsp, bspfile_texheader_t *data, int size)
     bsp_texture_t **textures = calloc(data->texture_count, sizeof *textures);
 
     for (int i = 0; i < data->texture_count; i++) {
+        /*
+         * The reasoning for this is not clear, but some maps (e.g. e1m2)
+         * require it.
+         *
+         * TODO: find the reason for this and document it.
+         */
+        if (data->offsets[i] == -1) {
+            continue;
+        }
+
         bspfile_texture_t *texdata =
                 (bspfile_texture_t *)((uint8_t *)data + data->offsets[i]);
+
+        printf("Loading texture '%s'...\n", texdata->name);
 
         if (texdata->width % 16 != 0 || texdata->height % 16 != 0) {
             Engine.fatal("Texture '%s' has illegal dimensions.\n", texdata->name);
@@ -217,7 +266,7 @@ void bsp_load_textures(bsp_t *bsp, bspfile_texheader_t *data, int size)
          * Ratio of mipmap pixels to texture pixels:
          * (8x8 + 4x4 + 2x2 + 1x1) / (8x8) = 85/64
          */
-        int pixel_count = texdata->width * texdata->height * (85/64);
+        int pixel_count = texdata->width * texdata->height * 85 / 64;
 
         textures[i] = calloc(1, sizeof **textures + pixel_count);
         strncpy(textures[i]->name, texdata->name, 15);
@@ -230,6 +279,22 @@ void bsp_load_textures(bsp_t *bsp, bspfile_texheader_t *data, int size)
 
         memcpy(&textures[i] + sizeof **textures, texdata + sizeof texdata, pixel_count);
     }
+}
+
+/**
+ * Loads \p size bytes of lightmap data from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the lightmap data
+ * @param data An array of bytes containing lightmap data
+ * @param size The size in bytes of \p data
+ */
+void bsp_load_lightmaps(bsp_t *bsp, uint8_t *data, int size)
+{
+    uint8_t *lightmaps = calloc(size, sizeof *data);
+    if (lightmaps == NULL) {
+        Engine.fatal("Lightmap allocation failed.\n");
+    }
+    memcpy(lightmaps, data, size);
+    bsp->lightmaps = lightmaps;
 }
 
 /**
@@ -398,15 +463,23 @@ bsp_t *bsp_load(const char *path)
      * The order is arbitrary since the BSP tree is not actually read until it
      * is fully loaded, but this order ensures that there are no dangling
      * pointers just in case.
+     *
+     * TODO: combine surface loading into one function?
      */
     bsp_load_vertices(bsp, elements[LUMP_VERTICES], sizes[LUMP_VERTICES]);
     bsp_load_edges(bsp, elements[LUMP_EDGES], sizes[LUMP_EDGES]);
     bsp_load_edgetable(bsp, elements[LUMP_EDGETABLE], sizes[LUMP_EDGETABLE]);
-    bsp_load_vislists(bsp, elements[LUMP_VISLISTS], sizes[LUMP_VISLISTS]);
     bsp_load_textures(bsp, elements[LUMP_TEXTURES], sizes[LUMP_TEXTURES]);
+    bsp_load_lightmaps(bsp, elements[LUMP_LIGHTMAPS], sizes[LUMP_LIGHTMAPS]);
+    // bsp_load_texinfo(bsp, elements[LUMP_TEXINFO], sizes[LUMP_TEXINFO]);
+    // bsp_load_faces(bsp, elements[LUMP_FACES], sizes[LUMP_FACES]);
+    // bsp_load_facetable(bsp, elements[LUMP_FACETABLE], sizes[LUMP_FACETABLE]);
+    bsp_load_vislists(bsp, elements[LUMP_VISLISTS], sizes[LUMP_VISLISTS]);
     bsp_load_leaves(bsp, elements[LUMP_LEAVES], sizes[LUMP_LEAVES]);
     bsp_load_planes(bsp, elements[LUMP_PLANES], sizes[LUMP_PLANES]);
     bsp_load_nodes(bsp, elements[LUMP_NODES], sizes[LUMP_NODES]);
+    // bsp_load_clipnodes(bsp, elements[LUMP_CLIPNODES], sizes[LUMP_CLIPNODES]);
+    // bsp_load_entities(bsp, elements[LUMP_ENTITIES], sizes[LUMP_ENTITIES]);
     bsp_load_models(bsp, elements[LUMP_MODELS], sizes[LUMP_MODELS]);
 
     return bsp;

@@ -98,7 +98,7 @@ typedef struct {
     float  offset_v;
     uint32_t texture_index;
     uint32_t is_animated;
-} bspfile_surface_t;
+} bspfile_texinfo_t;
 
 typedef struct {
     uint16_t plane_index;
