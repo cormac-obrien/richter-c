@@ -35,7 +35,7 @@ enum {
     LUMP_LIGHTMAPS = 8,
     LUMP_CLIPNODES = 9,
     LUMP_LEAVES = 10,
-    LUMP_FACE_LIST = 11,
+    LUMP_FACETABLE = 11,
     LUMP_EDGES = 12,
     LUMP_EDGETABLE = 13,
     LUMP_MODELS = 14,
@@ -84,7 +84,8 @@ typedef struct {
     int32_t leaf_count;
     int32_t face_index;
     int32_t face_count;
-} bsp_model_t;
+} bspfile_model_t;
+typedef bspfile_model_t bsp_model_t;
 
 typedef struct {
     uint16_t endpoints[2];
@@ -133,6 +134,7 @@ typedef struct {
     uint32_t offset_quarter;
     uint32_t offset_eighth;
 } bspfile_texture_t;
+typedef bspfile_texture_t bsp_texture_t;
 
 typedef struct {
     /*

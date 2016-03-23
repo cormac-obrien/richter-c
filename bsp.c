@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "bsp.h"
+#include "engine.h"
 #include "utils.h"
 #include "vecmath.h"
 
@@ -29,13 +30,15 @@ typedef struct {
 } bsp_edge_t;
 
 typedef struct {
-    vec3_t normal;
-} bsp_plane_t;
-
-typedef struct {
     int id;
     int type;
 } bsp_leaf_t;
+
+typedef struct {
+    vec3_t   normal;
+    float    offset;
+    uint32_t type;
+} bsp_plane_t;
 
 /*
  * Internal representation of a node in a BSP tree
@@ -66,8 +69,6 @@ typedef struct bsp_node_s {
 
 
 typedef struct bsp_s {
-    uint8_t *data;
-
     int vertex_count;
     vec3_t *vertices;
 
@@ -77,14 +78,22 @@ typedef struct bsp_s {
     int edgetable_count;
     int *edgetable;
 
-    int plane_count;
-    bsp_plane_t *planes;
+    int texture_count;
+    bsp_texture_t **textures;
+
+    uint8_t *vislists;
 
     int leaf_count;
     bsp_leaf_t *leaves;
 
+    int plane_count;
+    bsp_plane_t *planes;
+
     int node_count;
     bsp_node_t *nodes;
+
+    int model_count;
+    bsp_model_t *models;
 
 } bsp_t;
 
@@ -98,12 +107,12 @@ bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
     }
 
     bsp_node_t *node = bsp->nodes;
-    while (node->plane_index > 0) {
+    while (node->plane_index >= 0) {
         if (vec3_dot(point, node->plane->normal) >= 0) {
-            printf("front: %p\n", node->front);
             if (node->front == node) {
                 puts("node->front points to itself");
             }
+            puts("front");
             node = node->front;
         } else {
             if (node->back == node) {
@@ -131,6 +140,7 @@ void bsp_load_vertices(bsp_t *bsp, vec3_t *data, int size)
         vec3_copy(vertices[i], data[i]);
     }
 
+    bsp->vertex_count = count;
     bsp->vertices = vertices;
 }
 
@@ -155,6 +165,7 @@ void bsp_load_edges(bsp_t *bsp, bspfile_edge_t *data, int size)
         edges[i].endpoints[1] = data[i].endpoints[1];
     }
 
+    bsp->edge_count = count;
     bsp->edges = edges;
 }
 
@@ -181,8 +192,60 @@ void bsp_load_edgetable(bsp_t *bsp, int *data, int size)
     bsp->edgetable = edgetable;
 }
 
+/**
+ * Loads \p size bytes' worth of texture data from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the texture data
+ * @param data A pointer to a texture header listing the textures
+ * @param size The total size of all texture data
+ *
+ * TODO: It probably makes sense to send the textures to the GPU here so the
+ * data doesn't need to be stored
+ */
 void bsp_load_textures(bsp_t *bsp, bspfile_texheader_t *data, int size)
 {
+    bsp_texture_t **textures = calloc(data->texture_count, sizeof *textures);
+
+    for (int i = 0; i < data->texture_count; i++) {
+        bspfile_texture_t *texdata =
+                (bspfile_texture_t *)((uint8_t *)data + data->offsets[i]);
+
+        if (texdata->width % 16 != 0 || texdata->height % 16 != 0) {
+            Engine.fatal("Texture '%s' has illegal dimensions.\n", texdata->name);
+        }
+
+        /*
+         * Ratio of mipmap pixels to texture pixels:
+         * (8x8 + 4x4 + 2x2 + 1x1) / (8x8) = 85/64
+         */
+        int pixel_count = texdata->width * texdata->height * (85/64);
+
+        textures[i] = calloc(1, sizeof **textures + pixel_count);
+        strncpy(textures[i]->name, texdata->name, 15);
+        textures[i]->width = texdata->width;
+        textures[i]->height = texdata->height;
+        textures[i]->offset_full = texdata->offset_full;
+        textures[i]->offset_half = texdata->offset_half;
+        textures[i]->offset_quarter = texdata->offset_quarter;
+        textures[i]->offset_eighth = texdata->offset_eighth;
+
+        memcpy(&textures[i] + sizeof **textures, texdata + sizeof texdata, pixel_count);
+    }
+}
+
+/**
+ * Loads \p size bytes of visibility data from \p data into \p bsp.
+ * @param bsp A pointer to the BSP struct in which to store the visibility data
+ * @param data An array of bytes containing visibility data
+ * @param size The size in bytes of \p data
+ */
+void bsp_load_vislists(bsp_t *bsp, uint8_t  *data, int size)
+{
+    uint8_t *vislists = calloc(size, sizeof *data);
+    if (vislists == NULL) {
+        Engine.fatal("Vislist allocation failed.\n");
+    }
+    memcpy(vislists, data, size);
+    bsp->vislists = vislists;
 }
 
 /**
@@ -207,6 +270,25 @@ void bsp_load_leaves(bsp_t *bsp, bspfile_leaf_t *data, int size)
     }
 
     bsp->leaves = leaves;
+}
+
+void bsp_load_planes(bsp_t *bsp, bspfile_plane_t *data, int size)
+{
+    if (size % sizeof *data != 0) {
+        fputs("Plane data has bad size.\n", stderr);
+        return;
+    }
+
+    int count = size / sizeof *data;
+    bsp_plane_t *planes = calloc(count, sizeof *planes);
+
+    for (int i = 0; i < count; i++) {
+        vec3_copy(planes[i].normal, data[i].normal);
+        planes[i].offset = data[i].offset;
+        planes[i].type = data[i].type;
+    }
+
+    bsp->planes = planes;
 }
 
 /**
@@ -241,6 +323,7 @@ void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
     for (int i = 0; i < count; i++) {
         nodes[i].id = i;
         nodes[i].plane_index = data[i].plane_index;
+        nodes[i].plane = &bsp->planes[i];
         printf("Node %d:\n", i);
 
         const int front = data[i].front;
@@ -273,12 +356,36 @@ void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
     bsp->nodes = nodes;
 }
 
+void bsp_load_models(bsp_t *bsp, bspfile_model_t *data, int size)
+{
+    if (size % sizeof *data != 0) {
+        Engine.fatal("Model data has bad size.\n");
+    }
+
+    int count = size / sizeof *data;
+    bsp_model_t *models = calloc(count, sizeof *models);
+
+    for (int i = 0; i < count; i++) {
+        models[i] = data[i];
+    }
+
+    bsp->models = models;
+}
+
+/**
+ * Loads a BSP tree from the map file indicated by \p path.
+ * @param path The path of the BSP file to be loaded
+ * @return A fully populated BSP tree representing the map
+ */
 bsp_t *bsp_load(const char *path)
 {
     void *bsp_data = Utils.readBinaryFile(path);
+
+    /*
+     * Calculate pointers to and sizes of each lump
+     */
     void *elements[LUMP_COUNT];
     int   sizes[LUMP_COUNT];
-
     bspfile_header_t *header = (bspfile_header_t *)bsp_data;
     for (int i = 0; i < LUMP_COUNT; i++) {
         elements[i] = (uint8_t *)bsp_data + header->lumps[i].offset;
@@ -287,15 +394,20 @@ bsp_t *bsp_load(const char *path)
 
     bsp_t *bsp = calloc(1, sizeof *bsp);
 
+    /*
+     * The order is arbitrary since the BSP tree is not actually read until it
+     * is fully loaded, but this order ensures that there are no dangling
+     * pointers just in case.
+     */
     bsp_load_vertices(bsp, elements[LUMP_VERTICES], sizes[LUMP_VERTICES]);
     bsp_load_edges(bsp, elements[LUMP_EDGES], sizes[LUMP_EDGES]);
     bsp_load_edgetable(bsp, elements[LUMP_EDGETABLE], sizes[LUMP_EDGETABLE]);
+    bsp_load_vislists(bsp, elements[LUMP_VISLISTS], sizes[LUMP_VISLISTS]);
+    bsp_load_textures(bsp, elements[LUMP_TEXTURES], sizes[LUMP_TEXTURES]);
     bsp_load_leaves(bsp, elements[LUMP_LEAVES], sizes[LUMP_LEAVES]);
+    bsp_load_planes(bsp, elements[LUMP_PLANES], sizes[LUMP_PLANES]);
     bsp_load_nodes(bsp, elements[LUMP_NODES], sizes[LUMP_NODES]);
-
-    vec3_t zero = {0.f, 0.f, 0.f};
-    bsp_leaf_t *leaf = bsp_find_leaf_containing(bsp, zero);
-    printf("Point is in leaf with id %d\n", leaf->id);
+    bsp_load_models(bsp, elements[LUMP_MODELS], sizes[LUMP_MODELS]);
 
     return bsp;
 }
