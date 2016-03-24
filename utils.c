@@ -92,6 +92,28 @@ static const uint8_t palette[] = {
 };
 
 /**
+ * Writes \p size bytes of data from \p data to the file indicated by \p path.
+ * @param path The path to the file to be written
+ * @param data The data to be written
+ * @param size The size in bytes of \p data
+ */
+int utils_dump(const char *path, const void *data, size_t size)
+{
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) {
+        return -1;
+    }
+
+    size_t written = fwrite((uint8_t *)data, 1, size, fp);
+    if (written < size) {
+        fprintf(stderr, "Short write to %s.\n", path);
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+/**
  * Converts an array of palette indices into an array of RGBA values.
  * @param indices An array of palette indices to be converted
  * @param index_count The number of elements in \p indices
@@ -165,6 +187,7 @@ void *utils_read_binary_file(const char *path)
 }
 
 const struct utils_namespace Utils = {
+    .dump = utils_dump,
     .indexedToRGBA = utils_indexed_to_rgba,
     .readBinaryFile = utils_read_binary_file
 };
