@@ -72,7 +72,7 @@ typedef struct bsp_node_s {
      * This field is the same as the bspfile_node_t's plane_index field, kept
      * here solely to determine if this is a node or a leaf.
      */
-    int plane_index;
+    int type;
 
     /*
      * The frame when this node was traversed last. If this equals the current
@@ -138,7 +138,7 @@ bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
     }
 
     bsp_node_t *node = bsp->nodes;
-    while (node->plane_index >= 0) {
+    while (node->type == 0) {
         if (vec3_dot(point, node->plane->normal) >= 0) {
             node = node->front;
         } else {
@@ -349,12 +349,41 @@ void bsp_load_planes(bsp_t *bsp, bspfile_plane_t *data, int size)
 }
 
 /**
+ * Performs an iterative search on \p bsp to determine whether it contains any
+ * cycles.
+ * @param bsp A pointer to the BSP struct to be searched for cycles
+ * @return True if the BSP contains a cycle, false otherwise
+ *
+ * TODO: The VLA is not a great way to do this -- should probably have static
+ * allocation with the maximum node count.
+ */
+bool bsp_contains_cycle(bsp_t *bsp)
+{
+    bool visited[bsp->node_count];
+    for (int i = 0; i < bsp->node_count; i++) {
+        visited[i] = false;
+    }
+
+    for (int i = 0; i < bsp->node_count; i++) {
+        visited[i] = true;
+        bsp_node_t *node = &bsp->nodes[i];
+        if (node->front->type == 0 && visited[node->front->id]) {
+            return true;
+        }
+
+        if (node->back->type == 0 && visited[node->back->id]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Loads \p size bytes' worth of nodes from \p data into \p bsp.
  * @param bsp A pointer to the BSP struct in which to store the node data
  * @param data An array of nodes to be loaded
  * @param size The size in bytes of \p data
- *
- * TODO: factor out cycle check
  */
 void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
 {
@@ -369,48 +398,33 @@ void bsp_load_nodes(bsp_t *bsp, bspfile_node_t *data, int size)
     int count = size / sizeof *data;
     bsp_node_t *nodes = calloc(count, sizeof *nodes);
 
-    /*
-     * Set up table for cycle checking
-     */
-    int visited[count];
-    for (int i = 0; i < count; i++) {
-        visited[i] = false;
-    }
-
     for (int i = 0; i < count; i++) {
         nodes[i].id = i;
-        nodes[i].plane_index = data[i].plane_index;
+        nodes[i].type = 0;
         nodes[i].plane = &bsp->planes[i];
-        printf("Node %d:\n", i);
 
         const int front = data[i].front;
         if (front < 0) {
             nodes[i].front = (bsp_node_t *)&bsp->leaves[~front];
-            printf("  Front = Leaf %d\n", ~front);
         } else {
-            if (visited[front]) {
-                fprintf(stderr, "Cycle detected: Node %d already has parent\n", front);
-            }
-            visited[front] = true;
             nodes[i].front = &nodes[front];
-            printf("  Front = Node %d\n", front);
         }
 
         const int back = data[i].back;
         if (back < 0) {
             nodes[i].back = (bsp_node_t *)&bsp->leaves[~back];
-            printf("  Back  = Leaf %d\n", ~back);
         } else {
-            if (visited[back]) {
-                fprintf(stderr, "Cycle detected: Node %d already has parent\n", back);
-            }
-            visited[back] = true;
             nodes[i].back = &nodes[back];
-            printf("  Back  = Node %d\n", back);
         }
     }
 
+    bsp->node_count = count;
     bsp->nodes = nodes;
+
+    if (bsp_contains_cycle(bsp)) {
+        free(bsp->nodes);
+        Engine.fatal("BSP tree is not acyclic.\n");
+    }
 }
 
 void bsp_load_models(bsp_t *bsp, bspfile_model_t *data, int size)
