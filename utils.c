@@ -131,7 +131,7 @@ uint8_t *utils_indexed_to_rgba(const uint8_t *indices, size_t index_count)
 
     for (size_t i = 0; i < index_count; i++) {
         for (size_t j = 0; j < 3; j++) {
-            rgba[4 * i + j] = palette[indices[i] + j];
+            rgba[4 * i + j] = palette[3 * indices[i] + j];
         }
 
         /*
