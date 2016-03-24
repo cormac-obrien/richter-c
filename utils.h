@@ -18,6 +18,7 @@
 #define UTILS_H
 
 extern const struct utils_namespace {
+    uint8_t *(* const indexedToRGBA)(const uint8_t *indices, size_t index_count);
     void *(* const readBinaryFile)(const char *path);
 } Utils;
 
