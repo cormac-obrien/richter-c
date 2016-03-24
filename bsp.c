@@ -140,16 +140,8 @@ bsp_leaf_t *bsp_find_leaf_containing(bsp_t *bsp, vec3_t point)
     bsp_node_t *node = bsp->nodes;
     while (node->plane_index >= 0) {
         if (vec3_dot(point, node->plane->normal) >= 0) {
-            if (node->front == node) {
-                puts("node->front points to itself");
-            }
-            puts("front");
             node = node->front;
         } else {
-            if (node->back == node) {
-                puts("node->back points to itself");
-            }
-            puts("back");
             node = node->back;
         }
     }
