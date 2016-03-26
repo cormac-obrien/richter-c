@@ -25,7 +25,7 @@
 #include "vecmath.h"
 
 #include "mdl.h"
-#include "utils.h"
+#include "file.h"
 
 #define MDL_MAGIC (0x4F504449)
 #define MDL_VERSION (6)
@@ -245,7 +245,7 @@ model_t *model_from_mdl(const char *path)
 {
     model_t *dest = calloc(1, sizeof *dest);
 
-    uint8_t *mdl_data = Utils.readBinaryFile(path);
+    uint8_t *mdl_data = File.readFile(path);
     if (mdl_data == NULL) {
         perror(path);
         return NULL;

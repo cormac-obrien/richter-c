@@ -17,10 +17,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stdint.h>
+
 extern const struct utils_namespace {
     int (* const dump)(const char *path, const void *data, size_t size);
     uint8_t *(* const indexedToRGBA)(const uint8_t *indices, size_t index_count);
-    void *(* const readBinaryFile)(const char *path);
 } Utils;
 
 #endif

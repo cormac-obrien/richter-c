@@ -147,47 +147,7 @@ uint8_t *utils_indexed_to_rgba(const uint8_t *indices, size_t index_count)
     return rgba;
 }
 
-void *utils_read_binary_file(const char *path)
-{
-    FILE *fp = fopen(path, "rb");
-    if (fp == NULL) {
-        fprintf(stderr, "Couldn't open %s.\n", path);
-        return NULL;
-    }
-
-    if (fseek(fp, 0, SEEK_END) != 0) {
-        perror(path);
-        return NULL;
-    }
-
-    const long file_size = ftell(fp);
-    if (file_size == -1) {
-        perror(path);
-        return NULL;
-    }
-
-    rewind(fp);
-
-    uint8_t *data = calloc(file_size, sizeof *data);
-    if (data == NULL) {
-        perror("model_from_bsp");
-        return NULL;
-    }
-
-    const size_t read_size = fread(data, sizeof *data, file_size, fp);
-    if ((long)read_size != file_size) {
-        fputs("Short read.\n", stderr);
-        return NULL;
-    }
-
-    fclose(fp);
-    fp = NULL;
-
-    return (void *)data;
-}
-
 const struct utils_namespace Utils = {
     .dump = utils_dump,
-    .indexedToRGBA = utils_indexed_to_rgba,
-    .readBinaryFile = utils_read_binary_file
+    .indexedToRGBA = utils_indexed_to_rgba
 };

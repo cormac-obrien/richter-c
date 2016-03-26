@@ -450,7 +450,7 @@ void bsp_load_models(bsp_t *bsp, bspfile_model_t *data, int size)
  */
 bsp_t *bsp_load(const char *path)
 {
-    void *bsp_data = Utils.readBinaryFile(path);
+    void *bsp_data = File.readFile(path);
 
     /*
      * Calculate pointers to and sizes of each lump
