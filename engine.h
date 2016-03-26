@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 extern const struct engine_namespace {
+    void (* const error)(const char *fmt, ...);
     void (* const fatal)(const char *fmt, ...);
     void (* const setTimeDelta)(float dt);
     float (* const getTimeDelta)();
